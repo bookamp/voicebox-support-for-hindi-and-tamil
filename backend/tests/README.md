@@ -49,6 +49,16 @@ cd backend
 python tests/test_check_progress_state.py
 ```
 
+### `test_transcription_language_defaults.py`
+Unit tests for per-language transcription defaults and language validation (outlier languages, supported codes, API models).
+
+**Usage (from project root):**
+```bash
+python -m backend.tests.test_transcription_language_defaults
+```
+
+**Covers:** `transcribe.get_default_transcription_model_id`, `utils.validation.validate_language`, and Pydantic models (`VoiceProfileCreate`, `GenerationRequest`, `TranscriptionRequest`) for all supported languages.
+
 ## Notes
 
 These are manual test scripts, not automated unit tests. They're designed for:
