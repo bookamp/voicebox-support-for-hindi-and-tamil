@@ -536,13 +536,15 @@ class MLXSTTBackend:
         self,
         audio_path: str,
         language: Optional[str] = None,
+        transcription_model_id: Optional[str] = None,
     ) -> str:
         """
         Transcribe audio to text.
 
         Args:
             audio_path: Path to audio file
-            language: Optional language hint (en or zh)
+            language: Optional language hint
+            transcription_model_id: Unused on MLX (language-specific models supported on PyTorch backend only)
 
         Returns:
             Transcribed text

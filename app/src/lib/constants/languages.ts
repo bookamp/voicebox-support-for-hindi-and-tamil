@@ -14,6 +14,7 @@ export const SUPPORTED_LANGUAGES = {
   pt: 'Portuguese',
   es: 'Spanish',
   it: 'Italian',
+  hi: 'Hindi',
 } as const;
 
 export type LanguageCode = keyof typeof SUPPORTED_LANGUAGES;

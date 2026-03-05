@@ -92,6 +92,7 @@ class STTBackend(Protocol):
         self,
         audio_path: str,
         language: Optional[str] = None,
+        transcription_model_id: Optional[str] = None,
     ) -> str:
         """
         Transcribe audio to text.

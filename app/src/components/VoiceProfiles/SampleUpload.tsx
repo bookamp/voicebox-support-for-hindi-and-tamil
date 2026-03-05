@@ -22,12 +22,14 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
+import type { LanguageCode } from '@/lib/constants/languages';
 import { useAudioPlayer } from '@/lib/hooks/useAudioPlayer';
 import { useAudioRecording } from '@/lib/hooks/useAudioRecording';
 import { useAddSample, useProfile } from '@/lib/hooks/useProfiles';
 import { useSystemAudioCapture } from '@/lib/hooks/useSystemAudioCapture';
 import { useTranscription } from '@/lib/hooks/useTranscription';
 import { usePlatform } from '@/platform/PlatformContext';
+import { useServerStore } from '@/stores/serverStore';
 import { AudioSampleRecording } from './AudioSampleRecording';
 import { AudioSampleSystem } from './AudioSampleSystem';
 import { AudioSampleUpload } from './AudioSampleUpload';
@@ -153,13 +155,21 @@ export function SampleUpload({ profileId, open, onOpenChange }: SampleUploadProp
     }
 
     try {
-      const language = profile?.language as 'en' | 'zh' | undefined;
-      const result = await transcribe.mutateAsync({ file, language });
+      const language = profile?.language;
+      const result = await transcribe.mutateAsync({
+        file,
+        language: language as LanguageCode | undefined,
+        transcriptionModelId:
+          language != null
+            ? useServerStore.getState().getTranscriptionModelIdForLanguage(language as LanguageCode)
+            : undefined,
+      });
 
       form.setValue('referenceText', result.text, { shouldValidate: true });
     } catch (error) {
+      const isDownloading = error instanceof Error && (error as Error & { downloading?: boolean }).downloading;
       toast({
-        title: 'Transcription failed',
+        title: isDownloading ? 'Whisper still downloading' : 'Transcription failed',
         description: error instanceof Error ? error.message : 'Failed to transcribe audio',
         variant: 'destructive',
       });

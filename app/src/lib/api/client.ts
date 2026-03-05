@@ -281,11 +281,18 @@ class ApiClient {
   }
 
   // Transcription
-  async transcribeAudio(file: File, language?: LanguageCode): Promise<TranscriptionResponse> {
+  async transcribeAudio(
+    file: File,
+    language?: LanguageCode,
+    transcriptionModelId?: string | null,
+  ): Promise<TranscriptionResponse> {
     const formData = new FormData();
     formData.append('file', file);
     if (language) {
       formData.append('language', language);
+    }
+    if (transcriptionModelId?.trim()) {
+      formData.append('transcription_model_id', transcriptionModelId.trim());
     }
 
     const url = `${this.getBaseUrl()}/transcribe`;
@@ -294,14 +301,27 @@ class ApiClient {
       body: formData,
     });
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({
-        detail: response.statusText,
-      }));
-      throw new Error(error.detail || `HTTP error! status: ${response.status}`);
+    const body = await response.json().catch(() => ({}));
+
+    // 202 = Whisper model still downloading; treat as "please wait" not success
+    if (response.status === 202 && body?.downloading) {
+      const err = new Error(body.message || 'Whisper model is still downloading. Please wait and try again.') as Error & { downloading?: boolean };
+      err.downloading = true;
+      throw err;
     }
 
-    return response.json();
+    if (!response.ok) {
+      const detail = body.detail;
+      const message =
+        typeof detail === 'string'
+          ? detail
+          : detail && typeof detail === 'object' && 'message' in detail
+            ? (detail as { message: string }).message
+            : body.message || response.statusText || `HTTP error! status: ${response.status}`;
+      throw new Error(message);
+    }
+
+    return body as TranscriptionResponse;
   }
 
   // Model Management

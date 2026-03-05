@@ -332,12 +332,17 @@ export function ProfileForm() {
 
     try {
       const language = form.getValues('language');
-      const result = await transcribe.mutateAsync({ file, language });
+      const result = await transcribe.mutateAsync({
+        file,
+        language,
+        transcriptionModelId: useServerStore.getState().getTranscriptionModelIdForLanguage(language),
+      });
 
       form.setValue('referenceText', result.text, { shouldValidate: true });
     } catch (error) {
+      const isDownloading = error instanceof Error && (error as Error & { downloading?: boolean }).downloading;
       toast({
-        title: 'Transcription failed',
+        title: isDownloading ? 'Whisper still downloading' : 'Transcription failed',
         description: error instanceof Error ? error.message : 'Failed to transcribe audio',
         variant: 'destructive',
       });

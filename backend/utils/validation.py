@@ -31,7 +31,7 @@ def validate_language(language: str) -> Tuple[bool, Optional[str]]:
     Validate language code.
 
     Supported languages for Qwen3-TTS:
-    Chinese, English, Japanese, Korean, German, French, Russian, Portuguese, Spanish, Italian
+    Chinese, English, Japanese, Korean, German, French, Russian, Portuguese, Spanish, Italian, Hindi
 
     Args:
         language: Language code
@@ -39,7 +39,7 @@ def validate_language(language: str) -> Tuple[bool, Optional[str]]:
     Returns:
         Tuple of (is_valid, error_message)
     """
-    valid_languages = ["zh", "en", "ja", "ko", "de", "fr", "ru", "pt", "es", "it"]
+    valid_languages = ["zh", "en", "ja", "ko", "de", "fr", "ru", "pt", "es", "it", "hi"]
     if language not in valid_languages:
         return False, f"Invalid language (must be one of: {', '.join(valid_languages)})"
 

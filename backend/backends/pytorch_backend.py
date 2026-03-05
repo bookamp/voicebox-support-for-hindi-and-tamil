@@ -377,6 +377,10 @@ class PyTorchSTTBackend:
         self.processor = None
         self.model_size = model_size
         self.device = self._get_device()
+        # Optional per-language Whisper model (e.g. script-specific); loaded when transcription_model_id is set
+        self._alt_model = None
+        self._alt_processor = None
+        self._alt_loaded_model_id: Optional[str] = None
     
     def _get_device(self) -> str:
         """Get the best available device."""
@@ -547,66 +551,89 @@ class PyTorchSTTBackend:
             del self.processor
             self.model = None
             self.processor = None
-            
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-            
-            print("Whisper model unloaded")
-    
+        if self._alt_model is not None:
+            del self._alt_model
+            del self._alt_processor
+            self._alt_model = None
+            self._alt_processor = None
+        self._alt_loaded_model_id = None
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        print("Whisper model unloaded")
+
+    def _load_alt_transcription_model_sync(self, model_id: str) -> None:
+        """Load an optional per-language Whisper model by HuggingFace repo ID."""
+        if not model_id:
+            return
+        if self._alt_loaded_model_id == model_id and self._alt_model is not None:
+            return
+        if self._alt_model is not None:
+            del self._alt_model
+            del self._alt_processor
+            self._alt_model = None
+            self._alt_processor = None
+        from transformers import WhisperProcessor, WhisperForConditionalGeneration
+        print(f"[Whisper] Loading language-specific model: {model_id}")
+        self._alt_processor = WhisperProcessor.from_pretrained(model_id)
+        self._alt_model = WhisperForConditionalGeneration.from_pretrained(model_id)
+        self._alt_model.to(self.device)
+        self._alt_loaded_model_id = model_id
+        print(f"[Whisper] Language-specific model loaded: {model_id}")
+
     async def transcribe(
         self,
         audio_path: str,
         language: Optional[str] = None,
+        transcription_model_id: Optional[str] = None,
     ) -> str:
         """
         Transcribe audio to text.
         
         Args:
             audio_path: Path to audio file
-            language: Optional language hint (en or zh)
+            language: Optional language hint
+            transcription_model_id: Optional HuggingFace model ID for this language (injected from API; no per-language logic here).
             
         Returns:
             Transcribed text
         """
-        await self.load_model_async(None)
-        
+        use_alt = bool((transcription_model_id or "").strip())
+        configured_id = (transcription_model_id or "").strip() or None
+
+        if use_alt and configured_id:
+            await asyncio.to_thread(self._load_alt_transcription_model_sync, configured_id)
+            model, processor = self._alt_model, self._alt_processor
+        else:
+            await self.load_model_async(None)
+            model, processor = self.model, self.processor
+
+        use_alt_model = use_alt and configured_id
+
         def _transcribe_sync():
             """Run synchronous transcription in thread pool."""
-            # Load audio
             audio, sr = load_audio(audio_path, sample_rate=16000)
-            
-            # Process audio
-            inputs = self.processor(
+            inputs = processor(
                 audio,
                 sampling_rate=16000,
                 return_tensors="pt",
+                return_attention_mask=True,
             )
             inputs = inputs.to(self.device)
-            
-            # Set language if provided
-            forced_decoder_ids = None
-            if language:
-                # Support all languages from frontend: en, zh, ja, ko, de, fr, ru, pt, es, it
-                # Whisper supports these and many more
-                forced_decoder_ids = self.processor.get_decoder_prompt_ids(
-                    language=language,
-                    task="transcribe",
-                )
-            
-            # Generate transcription
+            generate_kwargs = {"task": "transcribe"}
+            if language and not use_alt_model:
+                generate_kwargs["language"] = language
+            if "attention_mask" in inputs:
+                generate_kwargs["attention_mask"] = inputs["attention_mask"]
+
             with torch.no_grad():
-                predicted_ids = self.model.generate(
+                predicted_ids = model.generate(
                     inputs["input_features"],
-                    forced_decoder_ids=forced_decoder_ids,
+                    **generate_kwargs,
                 )
-            
-            # Decode
-            transcription = self.processor.batch_decode(
+            transcription = processor.batch_decode(
                 predicted_ids,
                 skip_special_tokens=True,
             )[0]
-            
             return transcription.strip()
-        
-        # Run blocking transcription in thread pool
+
         return await asyncio.to_thread(_transcribe_sync)
