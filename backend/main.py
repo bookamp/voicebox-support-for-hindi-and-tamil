@@ -1297,7 +1297,11 @@ async def get_model_status():
             return whisper_model.is_loaded() and getattr(whisper_model, 'model_size', None) == model_size
         except Exception:
             return False
-    
+
+    def check_whisper_alt_loaded(model_id: str):
+        """Check if the given alt Whisper model (by HF repo ID) is loaded."""
+        return transcribe.is_alt_model_loaded(model_id)
+
     # Use backend-specific model IDs
     if backend_type == "mlx":
         tts_1_7b_id = "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16"
@@ -1314,7 +1318,8 @@ async def get_model_status():
         whisper_small_id = "openai/whisper-small"
         whisper_medium_id = "openai/whisper-medium"
         whisper_large_id = "openai/whisper-large"
-    
+    whisper_hindi_id = "collabora/whisper-large-v2-hindi"
+
     model_configs = [
         {
             "model_name": "qwen-tts-1.7B",
@@ -1358,8 +1363,15 @@ async def get_model_status():
             "model_size": "large",
             "check_loaded": lambda: check_whisper_loaded("large"),
         },
+        {
+            "model_name": "whisper-hindi",
+            "display_name": "Whisper Hindi",
+            "hf_repo_id": whisper_hindi_id,
+            "model_size": "hindi",
+            "check_loaded": lambda: check_whisper_alt_loaded(whisper_hindi_id),
+        },
     ]
-    
+
     # Build a mapping of model_name -> hf_repo_id so we can check if shared repos are downloading
     model_to_repo = {cfg["model_name"]: cfg["hf_repo_id"] for cfg in model_configs}
     
@@ -1541,8 +1553,12 @@ async def trigger_model_download(request: models.ModelDownloadRequest):
             "model_size": "large",
             "load_func": lambda: transcribe.get_whisper_model().load_model("large"),
         },
+        "whisper-hindi": {
+            "model_size": "hindi",
+            "load_func": lambda: transcribe.load_alt_model_async("collabora/whisper-large-v2-hindi"),
+        },
     }
-    
+
     if request.model_name not in model_configs:
         raise HTTPException(status_code=400, detail=f"Unknown model: {request.model_name}")
     
@@ -1621,8 +1637,13 @@ async def delete_model(model_name: str):
             "model_size": "large",
             "model_type": "whisper",
         },
+        "whisper-hindi": {
+            "hf_repo_id": "collabora/whisper-large-v2-hindi",
+            "model_size": "hindi",
+            "model_type": "whisper_alt",
+        },
     }
-    
+
     if model_name not in model_configs:
         raise HTTPException(status_code=400, detail=f"Unknown model: {model_name}")
     
@@ -1639,7 +1660,10 @@ async def delete_model(model_name: str):
             whisper_model = transcribe.get_whisper_model()
             if whisper_model.is_loaded() and whisper_model.model_size == config["model_size"]:
                 transcribe.unload_whisper_model()
-        
+        elif config["model_type"] == "whisper_alt":
+            if transcribe.is_alt_model_loaded(config["hf_repo_id"]):
+                transcribe.unload_alt_model()
+
         # Find and delete the cache directory (using HuggingFace's OS-specific cache location)
         cache_dir = hf_constants.HF_HUB_CACHE
         repo_cache_dir = Path(cache_dir) / ("models--" + hf_repo_id.replace("/", "--"))

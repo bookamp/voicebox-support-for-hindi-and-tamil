@@ -3,14 +3,18 @@ Unit tests for per-language transcription defaults and language validation.
 
 Covers:
 - transcribe.get_default_transcription_model_id (outlier languages with a default model; others return None)
+- transcribe.is_alt_model_loaded, load_alt_model_async, unload_alt_model (model management for alt Whisper)
 - utils.validation.validate_language (invalid code returns False)
 - models: VoiceProfileCreate, GenerationRequest, TranscriptionRequest (accept valid, reject invalid)
 
 Run from project root: python -m backend.tests.test_transcription_language_defaults
 """
 
+import asyncio
 import sys
 from pathlib import Path
+from unittest.mock import patch
+
 
 # Project root so "backend" is a package (needed for transcribe's relative imports)
 _project_root = Path(__file__).resolve().parent.parent.parent
@@ -51,6 +55,49 @@ def test_validate_language_invalid():
     assert valid is False
     assert err is not None
     assert "Invalid language" in err
+
+
+def test_is_alt_model_loaded_returns_bool():
+    """is_alt_model_loaded returns a boolean; delegates to backend when it has is_alt_loaded, else False."""
+    from backend import transcribe
+
+    # Backend with is_alt_loaded returning False (no alt model loaded)
+    mock_backend = type("MockBackend", (), {"is_alt_loaded": lambda self, model_id: False})()
+
+    with patch.object(transcribe, "get_stt_backend", return_value=mock_backend):
+        assert transcribe.is_alt_model_loaded("collabora/whisper-large-v2-hindi") is False
+
+    # Backend with is_alt_loaded returning True (alt model loaded)
+    mock_backend_loaded = type("MockBackend", (), {"is_alt_loaded": lambda self, model_id: model_id == "collabora/whisper-large-v2-hindi"})()
+
+    with patch.object(transcribe, "get_stt_backend", return_value=mock_backend_loaded):
+        assert transcribe.is_alt_model_loaded("collabora/whisper-large-v2-hindi") is True
+        assert transcribe.is_alt_model_loaded("other/model") is False
+
+
+def test_load_alt_model_async_raises_when_backend_unsupported():
+    """load_alt_model_async raises RuntimeError when backend does not support alt models (e.g. MLX)."""
+    from backend import transcribe
+
+    # Backend without load_alt_model_async (e.g. MLX)
+    mock_backend = object()
+
+    with patch.object(transcribe, "get_stt_backend", return_value=mock_backend):
+        try:
+            asyncio.run(transcribe.load_alt_model_async("collabora/whisper-large-v2-hindi"))
+            assert False, "Expected RuntimeError"
+        except RuntimeError as e:
+            assert "PyTorch" in str(e) or "only supported" in str(e).lower()
+
+
+def test_unload_alt_model_no_op_when_unsupported():
+    """unload_alt_model can be called without error when backend does not support alt models (no-op)."""
+    from backend import transcribe
+
+    mock_backend = object()  # No unload_alt_model attribute
+
+    with patch.object(transcribe, "get_stt_backend", return_value=mock_backend):
+        transcribe.unload_alt_model()  # should not raise
 
 
 def _models_available():
@@ -151,6 +198,9 @@ def run_tests():
         test_get_default_transcription_model_id_returns_none_for_language_without_default,
         test_get_default_transcription_model_id_unknown,
         test_validate_language_invalid,
+        test_is_alt_model_loaded_returns_bool,
+        test_load_alt_model_async_raises_when_backend_unsupported,
+        test_unload_alt_model_no_op_when_unsupported,
         test_voice_profile_create_accepts_valid_language,
         test_voice_profile_create_rejects_invalid_language,
         test_generation_request_accepts_valid_language,

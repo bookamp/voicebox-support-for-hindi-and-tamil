@@ -57,7 +57,7 @@ Unit tests for per-language transcription defaults and language validation (outl
 python -m backend.tests.test_transcription_language_defaults
 ```
 
-**Covers:** `transcribe.get_default_transcription_model_id`, `utils.validation.validate_language`, and Pydantic models (`VoiceProfileCreate`, `GenerationRequest`, `TranscriptionRequest`) for all supported languages.
+**Covers:** `transcribe.get_default_transcription_model_id`, `transcribe.is_alt_model_loaded` / `load_alt_model_async` / `unload_alt_model` (model management for alt Whisper), `utils.validation.validate_language`, and Pydantic models (`VoiceProfileCreate`, `GenerationRequest`, `TranscriptionRequest`) for all supported languages.
 
 ## Notes
 

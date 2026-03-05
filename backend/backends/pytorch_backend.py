@@ -561,6 +561,26 @@ class PyTorchSTTBackend:
             torch.cuda.empty_cache()
         print("Whisper model unloaded")
 
+    def is_alt_loaded(self, model_id: str) -> bool:
+        """Return True if the given alt model ID is currently loaded."""
+        return (self._alt_loaded_model_id or "") == model_id
+
+    async def load_alt_model_async(self, model_id: str) -> None:
+        """Download and load an optional per-language Whisper model by HuggingFace repo ID."""
+        await asyncio.to_thread(self._load_alt_transcription_model_sync, model_id)
+
+    def unload_alt_model(self) -> None:
+        """Unload the optional per-language Whisper model if loaded."""
+        if self._alt_model is not None:
+            del self._alt_model
+            del self._alt_processor
+            self._alt_model = None
+            self._alt_processor = None
+        self._alt_loaded_model_id = None
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        print("Whisper alt model unloaded")
+
     def _load_alt_transcription_model_sync(self, model_id: str) -> None:
         """Load an optional per-language Whisper model by HuggingFace repo ID."""
         if not model_id:

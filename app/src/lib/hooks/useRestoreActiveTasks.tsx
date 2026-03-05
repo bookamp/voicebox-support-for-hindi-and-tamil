@@ -84,4 +84,5 @@ export const MODEL_DISPLAY_NAMES: Record<string, string> = {
   'whisper-small': 'Whisper Small',
   'whisper-medium': 'Whisper Medium',
   'whisper-large': 'Whisper Large',
+  'whisper-hindi': 'Whisper Hindi',
 };
